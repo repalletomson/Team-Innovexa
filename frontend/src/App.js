@@ -1,23 +1,17 @@
-import logo from './logo.svg';
+// import { CandleSeries } from '@syncfusion/ej2-charts';
 import './App.css';
+import PieChart from './PieChart';
+import OverView from './templates/Overview';
+import CandleStickChart from './templates/CandleStickChart';
 
 function App() {
   return (
     <div className="App">
-      <header className="App-header">
-        <img src={logo} className="App-logo" alt="logo" />
-        <p>
-          Edit <code>src/App.js</code> and save to reload.
-        </p>
-        <a
-          className="App-link"
-          href="https://reactjs.org"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          Learn React
-        </a>
-      </header>
+      <OverView />
+      <div ></div>
+      <PieChart/>
+      <br />
+      <CandleStickChart/>
     </div>
   );
 }
