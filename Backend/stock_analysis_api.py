@@ -1,10 +1,12 @@
 from flask import Flask, jsonify, request
+from flask_cors import CORS
 import requests
 import pandas as pd
 from datetime import datetime
 import os
 
 app = Flask(__name__)
+CORS(app)  # Enable CORS for all routes
 
 # API Configuration
 API_KEY = "fc858759c6e24378a02282099a072a7e"
@@ -49,17 +51,10 @@ def compute_drawdown(df):
     df["drawdown_pct"] = drawdown * 100
     return df
 
-@app.route('/api/stock-analysis/<symbol>', methods=['GET'])
+
+@app.route('/api/stock-analysis/', methods=['GET'])
 def get_stock_analysis(symbol):
-    """
-    Get stock analysis including price data and drawdown calculations
-    
-    Args:
-        symbol: Stock symbol (e.g., NFLX, MSFT)
-    
-    Returns:
-        JSON response with stock data and drawdown analysis
-    """
+ 
     try:
         # Fetch stock data
         df, error = fetch_monthly_data(symbol.upper())

@@ -47,6 +47,9 @@ const Dashboard = () => {
   const [error, setError] = useState('');
   const [lastUpdated, setLastUpdated] = useState(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [mddData, setMddData] = useState({});
+  const [mddLoading, setMddLoading] = useState(false);
+  const [mddError, setMddError] = useState('');
 
   const refreshTimerRef = useRef(null);
 
@@ -73,8 +76,36 @@ const Dashboard = () => {
     []
   );
 
+  const fetchMDDData = useCallback(async () => {
+    setMddLoading(true);
+    setMddError('');
+    
+    try {
+      const symbols = ['NFLX', 'MSFT'];
+      const response = await fetch(' http://127.0.0.1:5000/api/stock-analysis/compare', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ symbols })
+      });
+      
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+      
+      const data = await response.json();
+      setMddData(data);
+    } catch (err) {
+      setMddError(err.message || 'Failed to fetch MDD data');
+    } finally {
+      setMddLoading(false);
+    }
+  }, []);
+
   useEffect(() => {
     loadMonthlySeries();
+    fetchMDDData(); // Load MDD data on component mount
     refreshTimerRef.current = setInterval(() => loadMonthlySeries(true), REFRESH_INTERVAL);
 
     return () => {
@@ -82,7 +113,7 @@ const Dashboard = () => {
         clearInterval(refreshTimerRef.current);
       }
     };
-  }, [loadMonthlySeries]);
+  }, [loadMonthlySeries, fetchMDDData]);
 
   const handleLogout = () => {
     logout();
@@ -230,6 +261,83 @@ const Dashboard = () => {
     [createLineData]
   );
 
+  // MDD Chart Data
+  const createMDDChartData = useCallback(() => {
+    if (!mddData.stocks || Object.keys(mddData.stocks).length === 0) return null;
+
+    const symbols = Object.keys(mddData.stocks);
+    const datasets = [];
+    
+    symbols.forEach((symbol, index) => {
+      const stockData = mddData.stocks[symbol];
+      if (stockData.error) return;
+      
+      const color = symbol === 'MSFT' ? COLOR_TOKENS.MSFT : COLOR_TOKENS.NFLX;
+      
+      datasets.push({
+        label: `${symbol} Drawdown`,
+        data: stockData.monthly_data.map(item => ({
+          x: item.date,
+          y: item.drawdown_pct
+        })),
+        borderColor: color,
+        backgroundColor: hexToRgba(color, 0.1),
+        borderWidth: 2,
+        fill: false,
+        pointRadius: 1,
+        tension: 0.1,
+      });
+    });
+
+    return {
+      datasets
+    };
+  }, [mddData]);
+
+  // Combined Price Chart Data
+  const createCombinedPriceChartData = useCallback(() => {
+    if (!mddData.stocks || Object.keys(mddData.stocks).length === 0) return null;
+
+    const symbols = Object.keys(mddData.stocks);
+    const datasets = [];
+    
+    symbols.forEach((symbol, index) => {
+      const stockData = mddData.stocks[symbol];
+      if (stockData.error) return;
+      
+      const color = symbol === 'MSFT' ? COLOR_TOKENS.MSFT : COLOR_TOKENS.NFLX;
+      
+      datasets.push({
+        label: `${symbol} Price`,
+        data: stockData.monthly_data.map(item => ({
+          x: item.date,
+          y: item.close_price
+        })),
+        borderColor: color,
+        backgroundColor: (context) => {
+          const { ctx, chartArea } = context.chart;
+          if (!chartArea) return color;
+          const gradient = ctx.createLinearGradient(0, chartArea.top, 0, chartArea.bottom);
+          gradient.addColorStop(0, hexToRgba(color, 0.25));
+          gradient.addColorStop(1, hexToRgba(color, 0));
+          return gradient;
+        },
+        borderWidth: 2,
+        fill: true,
+        pointRadius: 2,
+        tension: 0.35,
+        spanGaps: true,
+      });
+    });
+
+    return {
+      datasets
+    };
+  }, [mddData]);
+
+  const mddChartData = useMemo(() => createMDDChartData(), [createMDDChartData]);
+  const combinedPriceChartData = useMemo(() => createCombinedPriceChartData(), [createCombinedPriceChartData]);
+
   return (
     <div className={`dashboard ${sidebarOpen ? '' : 'dashboard--sidebar-collapsed'}`}>
       {/* Sidebar */}
@@ -242,7 +350,7 @@ const Dashboard = () => {
                 <path d="M20 14L28 18V26L20 30L12 26V18L20 14Z" fill="currentColor"/>
               </svg>
             </div>
-            <span className="dashboard__logo-text">APEX</span>
+            <span className="dashboard__logo-text">INVEX</span>
           </Link>
           <button 
             className="dashboard__sidebar-toggle"
@@ -266,7 +374,7 @@ const Dashboard = () => {
             <span>Dashboard</span>
           </button>
           
-          <button 
+          {/* <button 
             className={`dashboard__nav-item ${activePage === 'portfolio' ? 'dashboard__nav-item--active' : ''}`}
             onClick={() => setActivePage('portfolio')}
           >
@@ -275,9 +383,9 @@ const Dashboard = () => {
               <path d="M3.27 6.96L12 12.01L20.73 6.96M12 22.08V12" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
             </svg>
             <span>Portfolio</span>
-          </button>
+          </button> */}
           
-          <button 
+          {/* <button 
             className={`dashboard__nav-item ${activePage === 'analytics' ? 'dashboard__nav-item--active' : ''}`}
             onClick={() => setActivePage('analytics')}
           >
@@ -286,17 +394,24 @@ const Dashboard = () => {
             </svg>
             <span>Analytics</span>
           </button>
-          
+           */}
           <button 
-            className={`dashboard__nav-item ${activePage === 'settings' ? 'dashboard__nav-item--active' : ''}`}
-            onClick={() => setActivePage('settings')}
+            className={`dashboard__nav-item ${activePage === 'mdd' ? 'dashboard__nav-item--active' : ''}`}
+            onClick={() => {
+              setActivePage('mdd');
+              if (Object.keys(mddData).length === 0) {
+                fetchMDDData();
+              }
+            }}
           >
             <svg viewBox="0 0 24 24" fill="none">
-              <circle cx="12" cy="12" r="3" stroke="currentColor" strokeWidth="2"/>
-              <path d="M19.4 15C19.2669 15.3016 19.2272 15.6362 19.286 15.9606C19.3448 16.285 19.4995 16.5843 19.73 16.82L19.79 16.88C19.976 17.0657 20.1235 17.2863 20.2241 17.5291C20.3248 17.7719 20.3766 18.0322 20.3766 18.295C20.3766 18.5578 20.3248 18.8181 20.2241 19.0609C20.1235 19.3037 19.976 19.5243 19.79 19.71C19.6043 19.896 19.3837 20.0435 19.1409 20.1441C18.8981 20.2448 18.6378 20.2966 18.375 20.2966C18.1122 20.2966 17.8519 20.2448 17.6091 20.1441C17.3663 20.0435 17.1457 19.896 16.96 19.71L16.9 19.65C16.6643 19.4195 16.365 19.2648 16.0406 19.206C15.7162 19.1472 15.3816 19.1869 15.08 19.32C14.7842 19.4468 14.532 19.6572 14.3543 19.9255C14.1766 20.1938 14.0813 20.5082 14.08 20.83V21C14.08 21.5304 13.8693 22.0391 13.4942 22.4142C13.1191 22.7893 12.6104 23 12.08 23C11.5496 23 11.0409 22.7893 10.6658 22.4142C10.2907 22.0391 10.08 21.5304 10.08 21V20.91C10.0723 20.579 9.96512 20.258 9.77251 19.9887C9.5799 19.7194 9.31074 19.5143 9 19.4C8.69838 19.2669 8.36381 19.2272 8.03941 19.286C7.71502 19.3448 7.41568 19.4995 7.18 19.73L7.12 19.79C6.93425 19.976 6.71368 20.1235 6.47088 20.2241C6.22808 20.3248 5.96783 20.3766 5.705 20.3766C5.44217 20.3766 5.18192 20.3248 4.93912 20.2241C4.69632 20.1235 4.47575 19.976 4.29 19.79C4.10405 19.6043 3.95653 19.3837 3.85588 19.1409C3.75523 18.8981 3.70343 18.6378 3.70343 18.375C3.70343 18.1122 3.75523 17.8519 3.85588 17.6091C3.95653 17.3663 4.10405 17.1457 4.29 16.96L4.35 16.9C4.58054 16.6643 4.73519 16.365 4.794 16.0406C4.85282 15.7162 4.81312 15.3816 4.68 15.08C4.55324 14.7842 4.34276 14.532 4.07447 14.3543C3.80618 14.1766 3.49179 14.0813 3.17 14.08H3C2.46957 14.08 1.96086 13.8693 1.58579 13.4942C1.21071 13.1191 1 12.6104 1 12.08C1 11.5496 1.21071 11.0409 1.58579 10.6658C1.96086 10.2907 2.46957 10.08 3 10.08H3.09C3.42099 10.0723 3.742 9.96512 4.0113 9.77251C4.28059 9.5799 4.48572 9.31074 4.6 9C4.73312 8.69838 4.77282 8.36381 4.714 8.03941C4.65519 7.71502 4.50054 7.41568 4.27 7.18L4.21 7.12C4.02405 6.93425 3.87653 6.71368 3.77588 6.47088C3.67523 6.22808 3.62343 5.96783 3.62343 5.705C3.62343 5.44217 3.67523 5.18192 3.77588 4.93912C3.87653 4.69632 4.02405 4.47575 4.21 4.29C4.39575 4.10405 4.61632 3.95653 4.85912 3.85588C5.10192 3.75523 5.36217 3.70343 5.625 3.70343C5.88783 3.70343 6.14808 3.75523 6.39088 3.85588C6.63368 3.95653 6.85425 4.10405 7.04 4.29L7.1 4.35C7.33568 4.58054 7.63502 4.73519 7.95941 4.794C8.28381 4.85282 8.61838 4.81312 8.92 4.68H9C9.29577 4.55324 9.54802 4.34276 9.72569 4.07447C9.90337 3.80618 9.99872 3.49179 10 3.17V3C10 2.46957 10.2107 1.96086 10.5858 1.58579C10.9609 1.21071 11.4696 1 12 1C12.5304 1 13.0391 1.21071 13.4142 1.58579C13.7893 1.96086 14 2.46957 14 3V3.09C14.0013 3.41179 14.0966 3.72618 14.2743 3.99447C14.452 4.26276 14.7042 4.47324 15 4.6C15.3016 4.73312 15.6362 4.77282 15.9606 4.714C16.285 4.65519 16.5843 4.50054 16.82 4.27L16.88 4.21C17.0657 4.02405 17.2863 3.87653 17.5291 3.77588C17.7719 3.67523 18.0322 3.62343 18.295 3.62343C18.5578 3.62343 18.8181 3.67523 19.0609 3.77588C19.3037 3.87653 19.5243 4.02405 19.71 4.21C19.896 4.39575 20.0435 4.61632 20.1441 4.85912C20.2448 5.10192 20.2966 5.36217 20.2966 5.625C20.2966 5.88783 20.2448 6.14808 20.1441 6.39088C20.0435 6.63368 19.896 6.85425 19.71 7.04L19.65 7.1C19.4195 7.33568 19.2648 7.63502 19.206 7.95941C19.1472 8.28381 19.1869 8.61838 19.32 8.92V9C19.4468 9.29577 19.6572 9.54802 19.9255 9.72569C20.1938 9.90337 20.5082 9.99872 20.83 10H21C21.5304 10 22.0391 10.2107 22.4142 10.5858C22.7893 10.9609 23 11.4696 23 12C23 12.5304 22.7893 13.0391 22.4142 13.4142C22.0391 13.7893 21.5304 14 21 14H20.91C20.5882 14.0013 20.2738 14.0966 20.0055 14.2743C19.7372 14.452 19.5268 14.7042 19.4 15Z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+              <path d="M3 3V21H21" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+              <path d="M7 16L12 11L16 15L21 10" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+              <path d="M16 10H21V15" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
             </svg>
-            <span>Settings</span>
+            <span>MDD</span>
           </button>
+      
         </nav>
         
         <div className="dashboard__sidebar-footer">
@@ -333,8 +448,8 @@ const Dashboard = () => {
               </svg>
             </button>
             <div className="dashboard__title">
-              <h1>Dashboard</h1>
-              <p>Welcome back, {user?.name?.split(' ')[0] || 'User'}</p>
+              <h1>{activePage === 'mdd' ? 'Maximum Drawdown Analysis' : 'Dashboard'}</h1>
+              <p>{activePage === 'mdd' ? 'Stock drawdown comparison and analysis' : `Welcome back, ${user?.name?.split(' ')[0] || 'User'}`}</p>
             </div>
           </div>
           <div className="dashboard__header-right">
@@ -366,40 +481,219 @@ const Dashboard = () => {
 
         {/* Dashboard Content */}
         <div className="dashboard__content">
-          {/* Last Updated & Refresh Status */}
-          <div className="dashboard__status">
-            <div className="dashboard__status-info">
-              {lastUpdated && (
-                <>
+          {activePage === 'mdd' ? (
+            <>
+              {/* MDD Status */}
+              <div className="dashboard__status">
+                <div className="dashboard__status-info">
+                  {mddLoading && (
+                    <span className="dashboard__refreshing">
+                      <span className="dashboard__spinner-small"></span>
+                      Loading MDD data...
+                    </span>
+                  )}
+                  <button
+                    className="dashboard__refresh-btn"
+                    onClick={fetchMDDData}
+                    disabled={mddLoading}
+                  >
+                    <svg viewBox="0 0 24 24" fill="none" className={mddLoading ? 'spinning' : ''}>
+                      <path d="M23 4V10H17M1 20V14H7" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                      <path d="M3.51 9C4.01717 7.56678 4.87913 6.2854 6.01547 5.27542C7.1518 4.26543 8.52547 3.55976 10.0083 3.22426C11.4911 2.88875 13.0348 2.93434 14.4952 3.35677C15.9556 3.77921 17.2853 4.56471 18.36 5.64L23 10M1 14L5.64 18.36C6.71475 19.4353 8.04437 20.2208 9.50481 20.6432C10.9652 21.0657 12.5089 21.1112 13.9917 20.7757C15.4745 20.4402 16.8482 19.7346 17.9845 18.7246C19.1209 17.7146 19.9828 16.4332 20.49 15" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                    </svg>
+                    Refresh MDD Data
+                  </button>
+                </div>
+              </div>
+
+              {/* MDD Error Message */}
+              {mddError && (
+                <div className="dashboard__error">
                   <svg viewBox="0 0 24 24" fill="none">
                     <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="2"/>
-                    <path d="M12 6V12L16 14" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
+                    <path d="M15 9L9 15M9 9L15 15" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
                   </svg>
-                  <span>Last updated: {formatTimestamp(lastUpdated)}</span>
-                </>
+                  <span>{mddError}</span>
+                </div>
               )}
-              {isRefreshing && (
-                <span className="dashboard__refreshing">
-                  <span className="dashboard__spinner-small"></span>
-                  Refreshing...
-                </span>
-              )}
-            </div>
-          </div>
+            </>
+          ) : (
+            <>
+              {/* Last Updated & Refresh Status */}
+              <div className="dashboard__status">
+                <div className="dashboard__status-info">
+                  {lastUpdated && (
+                    <>
+                      <svg viewBox="0 0 24 24" fill="none">
+                        <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="2"/>
+                        <path d="M12 6V12L16 14" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
+                      </svg>
+                      <span>Last updated: {formatTimestamp(lastUpdated)}</span>
+                    </>
+                  )}
+                  {isRefreshing && (
+                    <span className="dashboard__refreshing">
+                      <span className="dashboard__spinner-small"></span>
+                      Refreshing...
+                    </span>
+                  )}
+                </div>
+              </div>
 
-          {/* Error Message */}
-          {error && (
-            <div className="dashboard__error">
-              <svg viewBox="0 0 24 24" fill="none">
-                <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="2"/>
-                <path d="M15 9L9 15M9 9L15 15" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
-              </svg>
-              <span>{error}</span>
-            </div>
+              {/* Error Message */}
+              {error && (
+                <div className="dashboard__error">
+                  <svg viewBox="0 0 24 24" fill="none">
+                    <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="2"/>
+                    <path d="M15 9L9 15M9 9L15 15" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
+                  </svg>
+                  <span>{error}</span>
+                </div>
+              )}
+            </>
           )}
 
           {/* Loading State */}
-          {isLoading ? (
+          {activePage === 'mdd' ? (
+            mddLoading ? (
+              <div className="dashboard__loading">
+                <div className="dashboard__loading-spinner"></div>
+                <p>Loading MDD analysis...</p>
+              </div>
+            ) : mddData.stocks ? (
+              <>
+                {/* MDD Stats Cards */}
+                <div className="dashboard__stats">
+                  {Object.entries(mddData.stocks).map(([symbol, data]) => (
+                    !data.error && (
+                      <div key={symbol} className="dashboard__stat-card">
+                        <div className="dashboard__stat-header">
+                          <span className="dashboard__stat-label">{symbol}</span>
+                          <span className="dashboard__stat-badge dashboard__stat-badge--negative">
+                            Max Drawdown
+                          </span>
+                        </div>
+                        <div className="dashboard__stat-value">
+                          {data.max_drawdown.toFixed(2)}%
+                        </div>
+                        <div className="dashboard__stat-change">
+                          <span>Current: {data.current_drawdown.toFixed(2)}%</span>
+                          <span>Total Return: {data.total_return_pct.toFixed(2)}%</span>
+                        </div>
+                      </div>
+                    )
+                  ))}
+                  
+                  {mddData.comparison_summary && (
+                    <div className="dashboard__stat-card dashboard__stat-card--primary">
+                      <div className="dashboard__stat-header">
+                        <span className="dashboard__stat-label">Best Performer</span>
+                        <svg viewBox="0 0 24 24" fill="none">
+                          <path d="M18 20V10M12 20V4M6 20V14" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                        </svg>
+                      </div>
+                      <div className="dashboard__stat-value">
+                        {mddData.comparison_summary.best_performer}
+                      </div>
+                      <div className="dashboard__stat-sub">
+                        Highest total return in comparison
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* MDD Chart */}
+                <div className="dashboard__charts">
+                  <div className="dashboard__chart-card dashboard__chart-card--full">
+                    <div className="dashboard__chart-header">
+                      <div>
+                        <h3>Maximum Drawdown Comparison</h3>
+                        <p>Drawdown percentage over time for MSFT vs NFLX</p>
+                      </div>
+                    </div>
+                    <div className="dashboard__chart-container">
+                      {mddChartData ? (
+                        <Line 
+                          data={mddChartData} 
+                          options={{
+                            ...baseChartOptions,
+                            scales: {
+                              ...baseChartOptions.scales,
+                              y: {
+                                ...baseChartOptions.scales.y,
+                                ticks: {
+                                  ...baseChartOptions.scales.y.ticks,
+                                  callback: (value) => `${value}%`,
+                                },
+                              },
+                            },
+                            plugins: {
+                              ...baseChartOptions.plugins,
+                              legend: {
+                                display: true,
+                                position: 'top',
+                                labels: {
+                                  color: isDark ? '#f1f5f9' : '#0f172a',
+                                  font: { family: 'DM Sans', size: 12 },
+                                  usePointStyle: true,
+                                  pointStyle: 'line',
+                                },
+                              },
+                            },
+                          }} 
+                        />
+                      ) : (
+                        <div className="dashboard__chart-empty">No MDD data available.</div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                {/* MDD Info Cards */}
+                {/* <div className="dashboard__info-cards">
+                  <div className="dashboard__info-card">
+                    <div className="dashboard__info-icon">
+                      <svg viewBox="0 0 24 24" fill="none">
+                        <path d="M3 3V21H21" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                        <path d="M7 16L12 11L16 15L21 10" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                      </svg>
+                    </div>
+                    <div className="dashboard__info-content">
+                      <h4>Maximum Drawdown</h4>
+                      <p>Measures the largest peak-to-trough decline in portfolio value over the analysis period.</p>
+                    </div>
+                  </div>
+                  
+                  <div className="dashboard__info-card">
+                    <div className="dashboard__info-icon">
+                      <svg viewBox="0 0 24 24" fill="none">
+                        <path d="M22 11.08V12C21.9988 14.1564 21.3005 16.2547 20.0093 17.9818C18.7182 19.709 16.9033 20.9725 14.8354 21.5839C12.7674 22.1953 10.5573 22.1219 8.53447 21.3746C6.51168 20.6273 4.78465 19.2461 3.61096 17.4371C2.43727 15.628 1.87979 13.4881 2.02168 11.3363C2.16356 9.18455 2.99721 7.13631 4.39828 5.49706C5.79935 3.85781 7.69279 2.71537 9.79619 2.24013C11.8996 1.7649 14.1003 1.98232 16.07 2.85999" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
+                        <path d="M22 4L12 14.01L9 11.01" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
+                      </svg>
+                    </div>
+                    <div className="dashboard__info-content">
+                      <h4>Risk Assessment</h4>
+                      <p>Compare risk profiles between different stocks using drawdown analysis and volatility metrics.</p>
+                    </div>
+                  </div>
+                  
+                  <div className="dashboard__info-card">
+                    <div className="dashboard__info-icon">
+                      <svg viewBox="0 0 24 24" fill="none">
+                        <path d="M12 22S20 18 20 12V5L12 2L4 5V12C4 18 12 22 12 22Z" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
+                      </svg>
+                    </div>
+                    <div className="dashboard__info-content">
+                      <h4>Portfolio Optimization</h4>
+                      <p>Use drawdown data to optimize portfolio allocation and risk management strategies.</p>
+                    </div>
+                  </div>
+                </div> */}
+              </>
+            ) : (
+              <div className="dashboard__chart-empty">Click "Refresh MDD Data" to load analysis.</div>
+            )
+          ) : isLoading ? (
             <div className="dashboard__loading">
               <div className="dashboard__loading-spinner"></div>
               <p>Loading market data...</p>
@@ -412,7 +706,7 @@ const Dashboard = () => {
                   <div className="dashboard__stat-header">
                     <span className="dashboard__stat-label">MSFT</span>
                     <span className="dashboard__stat-badge dashboard__stat-badge--positive">
-                      Monthly Close
+                      Latest Price
                     </span>
                   </div>
                   <div className="dashboard__stat-value">
@@ -465,41 +759,81 @@ const Dashboard = () => {
 
               {/* Charts */}
               <div className="dashboard__charts">
+                {/* Combined Price Chart */}
                 <div className="dashboard__chart-card dashboard__chart-card--full">
                   <div className="dashboard__chart-header">
                     <div>
-                      <h3>Microsoft (MSFT) Monthly Closing Price</h3>
-                      <p>Resampled TwelveData series · Month-end closing values</p>
+                      <h3>MSFT vs NFLX - Combined Price Comparison</h3>
+                      <p>Monthly closing prices comparison · Real-time stock analysis</p>
                     </div>
                   </div>
                   <div className="dashboard__chart-container">
-                    {msftChartData ? (
-                      <Line data={msftChartData} options={baseChartOptions} />
+                    {combinedPriceChartData ? (
+                      <Line 
+                        data={combinedPriceChartData} 
+                        options={{
+                          ...baseChartOptions,
+                          plugins: {
+                            ...baseChartOptions.plugins,
+                            legend: {
+                              display: true,
+                              position: 'top',
+                              labels: {
+                                color: isDark ? '#f1f5f9' : '#0f172a',
+                                font: { family: 'DM Sans', size: 12 },
+                                usePointStyle: true,
+                                pointStyle: 'line',
+                              },
+                            },
+                          },
+                          scales: {
+                            ...baseChartOptions.scales,
+                            y: {
+                              ...baseChartOptions.scales.y,
+                              ticks: {
+                                ...baseChartOptions.scales.y.ticks,
+                                callback: (value) => `$${value}`,
+                              },
+                            },
+                          },
+                        }} 
+                      />
                     ) : (
-                      <div className="dashboard__chart-empty">No Microsoft data available.</div>
+                      <div className="dashboard__chart-empty">Loading combined price data...</div>
                     )}
                   </div>
                 </div>
 
-                <div className="dashboard__chart-card dashboard__chart-card--full">
+                {/* <div className="dashboard__chart-card dashboard__chart-card--full">
                   <div className="dashboard__chart-header">
                     <div>
-                      <h3>Netflix (NFLX) Monthly Closing Price</h3>
-                      <p>Comparison markers highlight long-term momentum</p>
+                      <h3>Individual Stock Performance</h3>
+                      <p>Separate analysis for detailed comparison</p>
                     </div>
                   </div>
-                  <div className="dashboard__chart-container">
-                    {nflxChartData ? (
-                      <Line data={nflxChartData} options={baseChartOptions} />
-                    ) : (
-                      <div className="dashboard__chart-empty">No Netflix data available.</div>
-                    )}
+                  <div className="dashboard__chart-container" style={{ display: 'flex', gap: '20px' }}>
+                    <div style={{ flex: 1 }}>
+                      <h4 style={{ color: COLOR_TOKENS.MSFT, marginBottom: '10px' }}>Microsoft (MSFT)</h4>
+                      {msftChartData ? (
+                        <Line data={msftChartData} options={baseChartOptions} />
+                      ) : (
+                        <div className="dashboard__chart-empty">No Microsoft data available.</div>
+                      )}
+                    </div>
+                    <div style={{ flex: 1 }}>
+                      <h4 style={{ color: COLOR_TOKENS.NFLX, marginBottom: '10px' }}>Netflix (NFLX)</h4>
+                      {nflxChartData ? (
+                        <Line data={nflxChartData} options={baseChartOptions} />
+                      ) : (
+                        <div className="dashboard__chart-empty">No Netflix data available.</div>
+                      )}
+                    </div>
                   </div>
-                </div>
+                </div> */}
               </div>
 
               {/* Info Cards */}
-              <div className="dashboard__info-cards">
+              {/* <div className="dashboard__info-cards">
                 <div className="dashboard__info-card">
                   <div className="dashboard__info-icon">
                     <svg viewBox="0 0 24 24" fill="none">
@@ -537,7 +871,7 @@ const Dashboard = () => {
                     <p>SPY series is cached for future peer analysis and performance attribution.</p>
                   </div>
                 </div>
-              </div>
+              </div> */}
             </>
           )}
         </div>
