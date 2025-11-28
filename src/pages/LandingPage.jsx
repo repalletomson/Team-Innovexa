@@ -62,8 +62,8 @@ const LandingPage = () => {
             </h1>
             
             <p className="hero__subtitle animate-on-scroll">
-              Real-time analytics, portfolio insights, and performance dashboards 
-              for asset managers.
+              Real-time analytics, and performance dashboards 
+              for risk measurement.
             </p>
             
             <div className="hero__cta animate-on-scroll">
@@ -78,7 +78,7 @@ const LandingPage = () => {
               </Link>
             </div>
 
-            <div className="hero__stats animate-on-scroll">
+            {/* <div className="hero__stats animate-on-scroll">
               <div className="hero__stat">
                 <span className="hero__stat-value">$50B+</span>
                 <span className="hero__stat-label">Assets Managed</span>
@@ -93,7 +93,7 @@ const LandingPage = () => {
                 <span className="hero__stat-value">150+</span>
                 <span className="hero__stat-label">Countries</span>
               </div>
-            </div>
+            </div> */}
           </div>
 
           <div className="hero__visual animate-on-scroll">

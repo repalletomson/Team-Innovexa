@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
+import { useAuth } from '../context/AuthContext';
 import '../styles/Auth.css';
 
 const Signup = () => {
@@ -10,7 +11,11 @@ const Signup = () => {
     confirmPassword: ''
   });
   const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState('');
   const [passwordStrength, setPasswordStrength] = useState(0);
+  
+  const navigate = useNavigate();
+  const { signup } = useAuth();
 
   const calculatePasswordStrength = (password) => {
     let strength = 0;
@@ -27,6 +32,7 @@ const Signup = () => {
       ...formData,
       [name]: value
     });
+    setError('');
     
     if (name === 'password') {
       setPasswordStrength(calculatePasswordStrength(value));
@@ -35,15 +41,36 @@ const Signup = () => {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    
     if (formData.password !== formData.confirmPassword) {
-      alert('Passwords do not match');
+      setError('Passwords do not match');
       return;
     }
+    
+    if (formData.password.length < 8) {
+      setError('Password must be at least 8 characters');
+      return;
+    }
+    
     setIsLoading(true);
-    // Simulate API call
-    await new Promise(resolve => setTimeout(resolve, 1500));
-    setIsLoading(false);
-    console.log('Signup:', formData);
+    setError('');
+    
+    try {
+      await signup({
+        name: formData.name,
+        email: formData.email,
+        password: formData.password
+      });
+      
+      // Redirect to login with success message
+      navigate('/login', { 
+        state: { message: 'Account created successfully! Please sign in.' }
+      });
+    } catch (err) {
+      setError(err.message || 'Signup failed. Please try again.');
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   const getStrengthLabel = () => {
@@ -82,6 +109,16 @@ const Signup = () => {
             <h1 className="auth__title">Create Account</h1>
             <p className="auth__subtitle">Start your investment journey today</p>
           </div>
+
+          {error && (
+            <div className="auth__alert auth__alert--error">
+              <svg viewBox="0 0 24 24" fill="none">
+                <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="2"/>
+                <path d="M15 9L9 15M9 9L15 15" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
+              </svg>
+              <span>{error}</span>
+            </div>
+          )}
 
           <form className="auth__form" onSubmit={handleSubmit}>
             <div className="auth__field">
@@ -183,7 +220,7 @@ const Signup = () => {
                 />
               </div>
               {formData.confirmPassword && formData.password !== formData.confirmPassword && (
-                <span className="auth__error">Passwords do not match</span>
+                <span className="auth__field-error">Passwords do not match</span>
               )}
             </div>
 
@@ -218,7 +255,7 @@ const Signup = () => {
           </div>
 
           <div className="auth__social">
-            <button className="auth__social-btn">
+            <button className="auth__social-btn" type="button">
               <svg viewBox="0 0 24 24">
                 <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/>
                 <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/>
@@ -227,7 +264,7 @@ const Signup = () => {
               </svg>
               <span>Google</span>
             </button>
-            <button className="auth__social-btn">
+            <button className="auth__social-btn" type="button">
               <svg viewBox="0 0 24 24" fill="currentColor">
                 <path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z"/>
               </svg>
@@ -278,4 +315,3 @@ const Signup = () => {
 };
 
 export default Signup;
-
