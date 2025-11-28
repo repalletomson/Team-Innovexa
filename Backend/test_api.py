@@ -11,7 +11,7 @@ from datetime import datetime
 # Configuration
 BASE_URL = "http://localhost:5000"
 TEST_USER = {
-    "email": "test@example.com",
+    "email": "tt0234240@gmail.com",
     "password": "password123",
     "first_name": "Test",
     "last_name": "User"
